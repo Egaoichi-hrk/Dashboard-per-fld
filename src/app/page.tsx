@@ -1,103 +1,158 @@
-import Image from "next/image";
+"use client";
+import React from "react";
+// @ts-ignore
+import Papa from "papaparse";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid,
+} from "recharts";
+
+const CSV_FILE = "/08_康生通り1_full.csv";
+
+const ageOptions = [
+  { label: "全年齢", value: "allgender_allage" },
+  { label: "0代", value: "allgender_0" },
+  { label: "20代", value: "allgender_20" },
+  { label: "30代", value: "allgender_30" },
+  { label: "40代", value: "allgender_40" },
+  { label: "50代", value: "allgender_50" },
+  { label: "60代", value: "allgender_60" },
+  { label: "70代", value: "allgender_70" },
+  { label: "80代", value: "allgender_80" },
+];
+
+const weatherOptions = [
+  { label: "すべて", value: "all" },
+  { label: "晴れ", value: "sunny" },
+  { label: "雨", value: "rain" },
+  { label: "曇り", value: "cloudy" },
+];
+
+function getWeatherType(row: any) {
+  const rain = parseFloat(row["rainfall"]);
+  const sun = parseFloat(row["sunshine"]);
+  if (rain > 0) return "rain";
+  if (sun > 3) return "sunny";
+  return "cloudy";
+}
+
+function getWeekday(dateStr: string) {
+  const week = ["日","月","火","水","木","金","土"];
+  const d = new Date(dateStr.replace(/\//g, "-"));
+  return week[d.getDay()];
+}
+
+const weekdayOptions = [
+  { label: "すべて", value: "all" },
+  { label: "日", value: "日" },
+  { label: "月", value: "月" },
+  { label: "火", value: "火" },
+  { label: "水", value: "水" },
+  { label: "木", value: "木" },
+  { label: "金", value: "金" },
+  { label: "土", value: "土" },
+];
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [data, setData] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
+  // フィルタ状態
+  const [age, setAge] = React.useState("allgender_allage");
+  const [weather, setWeather] = React.useState("all");
+  const [weekday, setWeekday] = React.useState("all");
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  React.useEffect(() => {
+    fetch(CSV_FILE)
+      .then((res) => {
+        if (!res.ok) throw new Error("CSVの取得に失敗しました");
+        return res.text();
+      })
+      .then((csvText) => {
+        Papa.parse(csvText, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results) => {
+            setData(results.data as any[]);
+            setLoading(false);
+          },
+        });
+      })
+      .catch((e) => {
+        setError(e.message);
+        setLoading(false);
+      });
+  }, []);
+
+  // フィルタ適用
+  const filtered = data.filter((row) => {
+    if (!row[age]) return false;
+    if (weather !== "all" && getWeatherType(row) !== weather) return false;
+    if (weekday !== "all" && getWeekday(row.date) !== weekday) return false;
+    return true;
+  });
+
+  // イベントあり・なしでグループ分け
+  const eventRows = filtered.filter(row => row.events);
+  const noneRows = filtered.filter(row => !row.events);
+
+  // 平均人流
+  const avgEvent = eventRows.reduce((sum, row) => sum + (parseInt(row[age]) || 0), 0) / (eventRows.length || 1);
+  const avgNone = noneRows.reduce((sum, row) => sum + (parseInt(row[age]) || 0), 0) / (noneRows.length || 1);
+  const diff = avgEvent - avgNone;
+
+  // グラフ用データ
+  const chartData = [
+    {
+      name: "イベントあり - なし",
+      差分: Math.round(diff),
+      イベントあり: Math.round(avgEvent),
+      イベントなし: Math.round(avgNone),
+    },
+  ];
+
+  return (
+    <div className="p-8 text-black max-w-3xl mx-auto">
+      <h1 className="text-2xl font-bold mb-4">人流データダッシュボード</h1>
+      <div className="flex flex-wrap gap-4 mb-6">
+        <div>
+          <label className="block text-sm mb-1">年齢層</label>
+          <select value={age} onChange={e => setAge(e.target.value)} className="border rounded-xl px-2 py-1">
+            {ageOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+          </select>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+        <div>
+          <label className="block text-sm mb-1">天気</label>
+          <select value={weather} onChange={e => setWeather(e.target.value)} className="border rounded-xl px-2 py-1">
+            {weatherOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm mb-1">曜日</label>
+          <select value={weekday} onChange={e => setWeekday(e.target.value)} className="border rounded-xl px-2 py-1">
+            {weekdayOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+          </select>
+        </div>
+      </div>
+      {loading && <div>読み込み中...</div>}
+      {error && <div className="text-red-500">{error}</div>}
+      {!loading && !error && (
+        <div className="bg-gray-100 rounded-4xl shadow-lg p-4">
+          <h2 className="text-lg font-semibold mb-2">イベントありとなしの人流差分（{ageOptions.find(a=>a.value===age)?.label}）</h2>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="差分" fill="red" name="イベントあり-なしの差分" />
+              <Bar dataKey="イベントあり" fill="gray" name="イベントあり" />
+              <Bar dataKey="イベントなし" fill="gray" name="イベントなし" />
+            </BarChart>
+          </ResponsiveContainer>
+          <div className="text-xs text-gray-500 mt-2">※フィルタ条件に合致する日数ごとの平均値</div>
+        </div>
+      )}
     </div>
   );
-}
+} 
